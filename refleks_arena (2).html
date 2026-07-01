@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Refleks Arena">
+<title>Refleks Arena</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f2f2f7;min-height:100vh}
+
+#setup{display:flex;flex-direction:column;align-items:center;padding:40px 20px;gap:14px}
+#setup h1{font-size:28px;font-weight:700;color:#1c1c1e;text-align:center}
+#setup p{font-size:14px;color:#6d6d72;text-align:center}
+#players-list{width:100%;max-width:400px;display:flex;flex-direction:column;gap:10px}
+.player-entry{display:flex;align-items:center;gap:8px;background:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,0.07)}
+.player-num{font-size:14px;font-weight:600;color:#007aff;min-width:22px}
+.player-entry input{flex:1;border:none;outline:none;font-size:16px;color:#1c1c1e;background:transparent}
+.player-entry input::placeholder{color:#c7c7cc}
+.del-btn{background:none;border:none;font-size:22px;color:#ff3b30;cursor:pointer;padding:0 4px;line-height:1;min-width:28px;min-height:28px}
+#add-btn{width:100%;max-width:400px;padding:14px;border-radius:14px;border:2px dashed #007aff;background:transparent;font-size:16px;font-weight:600;color:#007aff;cursor:pointer;min-height:50px}
+#start-game-btn{width:100%;max-width:400px;padding:16px;border-radius:14px;border:none;background:#007aff;font-size:18px;font-weight:700;color:#fff;cursor:pointer;min-height:54px}
+#start-game-btn:disabled{opacity:0.4}
+#setup-err{font-size:13px;color:#ff3b30;text-align:center;min-height:18px}
+
+#game{display:none;flex-direction:column;align-items:center;padding:16px 12px 40px;gap:10px}
+#game h1{font-size:20px;font-weight:700;color:#1c1c1e}
+#signal{width:130px;height:130px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:#fff;transition:background 0.08s;user-select:none;flex-shrink:0}
+#signal.wait{background:#8e8e93}
+#signal.go{background:#34c759}
+#signal.trap{background:#ff3b30}
+#ginfo{font-size:13px;color:#6d6d72;text-align:center;min-height:18px}
+#players-grid{display:grid;gap:10px;width:100%;max-width:500px}
+.pcol{display:flex;flex-direction:column;align-items:center;gap:8px;background:#fff;border-radius:16px;padding:12px 8px;box-shadow:0 1px 3px rgba(0,0,0,0.07)}
+.pname{font-size:13px;font-weight:600;color:#1c1c1e;text-align:center;word-break:break-word}
+.psc{font-size:11px;color:#6d6d72;text-align:center;min-height:30px;line-height:1.7}
+.pbtn{width:100%;padding:22px 0;border-radius:12px;border:none;font-size:18px;font-weight:700;color:#fff;cursor:pointer;user-select:none;transition:transform 0.08s,opacity 0.1s;min-height:66px}
+.pbtn:active{transform:scale(0.95);opacity:0.8}
+.pbtn.bas{background:#007aff}
+.pbtn.trap{background:#ff9500}
+.pbtn:disabled{opacity:0.32}
+.action-btn{padding:13px 36px;border-radius:14px;border:none;background:#007aff;font-size:16px;font-weight:600;color:#fff;cursor:pointer;display:none;min-height:50px}
+.action-btn.green{background:#34c759}
+.action-btn.gray{background:#fff;border:1px solid #c7c7cc;color:#1c1c1e}
+
+#scoreboard{width:100%;max-width:500px;display:none;flex-direction:column;gap:8px}
+.sb-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:10px 14px;border-radius:14px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.sb-nm{font-weight:600;color:#1c1c1e}
+.sb-sc{color:#6d6d72;font-size:13px}
+.winner-row{background:#fff;font-size:16px;font-weight:700;padding:12px 14px;border-radius:14px;text-align:center;color:#1c1c1e;box-shadow:0 2px 6px rgba(0,0,0,0.09)}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <h1>🎯 Refleks Arena</h1>
+  <p>Oyuncuları ekle ve başla!</p>
+  <div id="players-list"></div>
+  <button id="add-btn">+ Oyuncu Ekle</button>
+  <div id="setup-err"></div>
+  <button id="start-game-btn" disabled>▶ Oyunu Başlat</button>
+</div>
+
+<div id="game">
+  <h1>Refleks Arena</h1>
+  <div id="signal" class="wait">⏳</div>
+  <div id="ginfo">Hazırlan...</div>
+  <div id="players-grid"></div>
+  <div id="scoreboard"></div>
+  <button id="gnext-btn" class="action-btn">▶ Sonraki Tur</button>
+  <button id="replay-btn" class="action-btn green">🔄 Tekrar Oyna</button>
+  <button id="back-btn" class="action-btn gray">← Oyuncu Değiştir</button>
+</div>
+
+<script>
+var ROUNDS = 5;
+var players = [];
+var scores = [], roundResults = [], roundMs = [], pressed = [];
+var round = 0, signalType = '', signalTime = 0;
+var t1 = null, t2 = null;
+
+// --- helpers ---
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function $(id){ return document.getElementById(id); }
+
+// --- setup ---
+function addPlayer(name) {
+  name = name || '';
+  players.push({ name: name });
+  renderSetup();
+  var inputs = document.querySelectorAll('.player-entry input');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+function removePlayer(i) {
+  players.splice(i, 1);
+  renderSetup();
+}
+
+function syncNames() {
+  var inputs = document.querySelectorAll('.player-entry input');
+  inputs.forEach(function(inp, i) {
+    if (players[i] !== undefined) players[i].name = inp.value;
+  });
+}
+
+function checkStart() {
+  syncNames();
+  var filled = players.filter(function(p){ return p.name.trim() !== ''; });
+  $('start-game-btn').disabled = filled.length < 2;
+  $('setup-err').textContent = filled.length < 2 && players.length >= 2 ? 'En az 2 isim gir' : '';
+}
+
+function renderSetup() {
+  var list = $('players-list');
+  list.innerHTML = '';
+  players.forEach(function(p, i) {
+    var row = document.createElement('div');
+    row.className = 'player-entry';
+
+    var num = document.createElement('span');
+    num.className = 'player-num';
+    num.textContent = (i + 1) + '.';
+
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = 'Oyuncu adı';
+    inp.value = p.name;
+    inp.maxLength = 20;
+    inp.addEventListener('input', function(){ p.name = this.value; checkStart(); });
+    inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') addPlayer(''); });
+
+    row.appendChild(num);
+    row.appendChild(inp);
+
+    if (players.length > 2) {
+      var del = document.createElement('button');
+      del.className = 'del-btn';
+      del.textContent = '✕';
+      (function(idx){ del.addEventListener('touchend', function(e){ e.preventDefault(); removePlayer(idx); }); })(i);
+      row.appendChild(del);
+    }
+
+    list.appendChild(row);
+  });
+  checkStart();
+}
+
+$('add-btn').addEventListener('touchend', function(e){
+  e.preventDefault();
+  addPlayer('');
+});
+$('add-btn').addEventListener('click', function(){
+  addPlayer('');
+});
+
+$('start-game-btn').addEventListener('touchend', function(e){
+  e.preventDefault();
+  startGame();
+});
+$('start-game-btn').addEventListener('click', function(){
+  startGame();
+});
+
+function startGame() {
+  syncNames();
+  players = players.filter(function(p){ return p.name.trim() !== ''; });
+  if (players.length < 2) { $('setup-err').textContent = 'En az 2 oyuncu gerekli!'; return; }
+  scores = players.map(function(){ return 0; });
+  roundResults = [];
+  round = 0;
+  $('setup').style.display = 'none';
+  $('game').style.display = 'flex';
+  buildGrid();
+  scheduleRound();
+}
+
+// --- grid ---
+function buildGrid() {
+  var grid = $('players-grid');
+  grid.innerHTML = '';
+  var cols = players.length <= 2 ? 2 : players.length <= 4 ? 2 : 3;
+  grid.style.gridTemplateColumns = 'repeat(' + cols + ',1fr)';
+
+  players.forEach(function(p, i) {
+    var col = document.createElement('div');
+    col.className = 'pcol';
+    col.id = 'pcol' + i;
+
+    var nm = document.createElement('div');
+    nm.className = 'pname';
+    nm.textContent = p.name;
+
+    var sc = document.createElement('div');
+    sc.className = 'psc';
+    sc.id = 'psc' + i;
+    sc.textContent = '—';
+
+    var btn = document.createElement('button');
+    btn.className = 'pbtn bas';
+    btn.id = 'pbtn' + i;
+    btn.textContent = 'BAS';
+    btn.disabled = true;
+
+    (function(idx){
+      btn.addEventListener('touchend', function(e){ e.preventDefault(); press(idx); });
+      btn.addEventListener('click', function(){ press(idx); });
+    })(i);
+
+    col.appendChild(nm);
+    col.appendChild(sc);
+    col.appendChild(btn);
+    grid.appendChild(col);
+  });
+}
+
+// --- round ---
+function scheduleRound() {
+  round++;
+  $('gnext-btn').style.display = 'none';
+  $('scoreboard').style.display = 'none';
+  $('replay-btn').style.display = 'none';
+  $('back-btn').style.display = 'none';
+
+  pressed = players.map(function(){ return false; });
+  roundMs = players.map(function(){ return null; });
+
+  players.forEach(function(_, i){
+    var b = $('pbtn' + i);
+    b.disabled = true; b.textContent = 'BAS'; b.className = 'pbtn bas';
+  });
+
+  setSignal('wait');
+  $('ginfo').textContent = 'Tur ' + round + '/' + ROUNDS + ' — Hazırlan...';
+
+  var isTrap = Math.random() < 0.35;
+  signalType = isTrap ? 'trap' : 'go';
+  var delay = 3000 + Math.random() * 7000;
+
+  t1 = setTimeout(function(){
+    setSignal(signalType);
+    signalTime = Date.now();
+    players.forEach(function(_, i){ $('pbtn' + i).disabled = false; });
+    $('ginfo').textContent = signalType === 'go' ? 'BAS! BAS! BAS!' : 'BASMA — Eli tutan kazanır!';
+    t2 = setTimeout(function(){ endRound(); }, 1500);
+  }, delay);
+}
+
+function setSignal(type) {
+  var sig = $('signal');
+  sig.className = 'wait'; sig.textContent = '⏳';
+  if (type === 'go')   { sig.className = 'go';   sig.textContent = 'BAS'; }
+  if (type === 'trap') { sig.className = 'trap';  sig.textContent = 'BASMA'; }
+}
+
+function press(pid) {
+  if (pressed[pid]) return;
+  pressed[pid] = true;
+  var ms = Date.now() - signalTime;
+  roundMs[pid] = ms;
+  var b = $('pbtn' + pid);
+  b.disabled = true;
+  if (signalType === 'go') { b.textContent = '✓ ' + ms + 'ms'; }
+  else { b.textContent = '✗ Bastın!'; b.className = 'pbtn trap'; }
+  if (pressed.every(function(p){ return p; })) { clearTimeout(t2); endRound(); }
+}
+
+function endRound() {
+  clearTimeout(t1); clearTimeout(t2);
+  players.forEach(function(_, i){ $('pbtn' + i).disabled = true; });
+
+  var result = { type: signalType, ms: roundMs.slice(), pts: players.map(function(){ return 0; }), desc: '' };
+
+  if (signalType === 'go') {
+    var best = null;
+    roundMs.forEach(function(m){ if (m !== null && (best === null || m < best)) best = m; });
+    if (best === null) {
+      result.desc = 'Kimse basmadı — puan yok';
+    } else {
+      roundMs.forEach(function(m, i){ if (m === best) result.pts[i] = 1; });
+      var winners = players.filter(function(_, i){ return result.pts[i]; }).map(function(p){ return p.name; });
+      result.desc = winners.join(' & ') + (winners.length > 1 ? ' berabere!' : ' ' + best + 'ms ile kazandı!');
+    }
+  } else {
+    var didPress = roundMs.map(function(m){ return m !== null; });
+    var noPress = players.filter(function(_, i){ return !didPress[i]; });
+    if (noPress.length === 0) {
+      result.desc = 'Herkes bastı — kimse puan alamadı';
+    } else {
+      players.forEach(function(_, i){ if (!didPress[i]) result.pts[i] = 1; });
+      result.desc = noPress.map(function(p){ return p.name; }).join(' & ') + ' basmadı, puan aldı!';
+    }
+  }
+
+  players.forEach(function(_, i){ scores[i] += result.pts[i]; });
+  roundResults.push(result);
+  updateScoreDisplays();
+  $('ginfo').textContent = result.desc;
+
+  if (round >= ROUNDS) {
+    setTimeout(showFinal, 900);
+  } else {
+    var nb = $('gnext-btn');
+    nb.style.display = 'block';
+    nb.textContent = '▶ Tur ' + (round + 1) + '/' + ROUNDS;
+  }
+}
+
+function updateScoreDisplays() {
+  players.forEach(function(_, i){
+    var lines = roundResults.map(function(r, idx){
+      var ms = r.ms[i] !== null ? r.ms[i] + 'ms' : '—';
+      var pt = r.pts[i] ? '✓' : '✗';
+      return 'T' + (idx+1) + ': ' + (r.type === 'go' ? (r.ms[i] !== null ? ms : '—') : (r.ms[i] === null ? 'bekle✓' : 'bastı✗')) + ' ' + pt;
+    });
+    $('psc' + i).innerHTML = lines.join('<br>');
+  });
+}
+
+function showFinal() {
+  var sb = $('scoreboard');
+  sb.innerHTML = ''; sb.style.display = 'flex'; sb.style.flexDirection = 'column'; sb.style.gap = '8px';
+
+  var ranked = players.map(function(p, i){ return { name: p.name, pts: scores[i], avg: avgMs(i) }; });
+  ranked.sort(function(a, b){ return b.pts - a.pts; });
+
+  ranked.forEach(function(r, rank){
+    var d = document.createElement('div'); d.className = 'sb-row';
+    var medal = rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : '';
+    d.innerHTML = '<span class="sb-nm">' + medal + ' ' + esc(r.name) + '</span><span class="sb-sc">' + r.pts + ' puan | ort. ' + (r.avg !== null ? r.avg + 'ms' : '—') + '</span>';
+    sb.appendChild(d);
+  });
+
+  var topScore = ranked[0].pts;
+  var winners = ranked.filter(function(r){ return r.pts === topScore; });
+  var wd = document.createElement('div'); wd.className = 'winner-row';
+  wd.textContent = winners.length > 1 ? '🤝 ' + winners.map(function(w){ return w.name; }).join(' & ') + ' berabere!' : '🏆 ' + winners[0].name + ' kazandı!';
+  sb.appendChild(wd);
+
+  setSignal('wait');
+  $('ginfo').textContent = 'Oyun bitti!';
+  $('gnext-btn').style.display = 'none';
+  $('replay-btn').style.display = 'block';
+  $('back-btn').style.display = 'block';
+}
+
+function avgMs(i) {
+  var vals = roundResults.filter(function(r){ return r.type === 'go' && r.ms[i] !== null; }).map(function(r){ return r.ms[i]; });
+  return vals.length ? Math.round(vals.reduce(function(a,b){ return a+b; }, 0) / vals.length) : null;
+}
+
+$('gnext-btn').addEventListener('touchend', function(e){ e.preventDefault(); scheduleRound(); });
+$('gnext-btn').addEventListener('click', function(){ scheduleRound(); });
+
+$('replay-btn').addEventListener('touchend', function(e){
+  e.preventDefault();
+  scores = players.map(function(){ return 0; });
+  roundResults = []; round = 0;
+  $('scoreboard').style.display = 'none';
+  $('replay-btn').style.display = 'none';
+  $('back-btn').style.display = 'none';
+  buildGrid(); scheduleRound();
+});
+$('replay-btn').addEventListener('click', function(){
+  scores = players.map(function(){ return 0; });
+  roundResults = []; round = 0;
+  $('scoreboard').style.display = 'none';
+  $('replay-btn').style.display = 'none';
+  $('back-btn').style.display = 'none';
+  buildGrid(); scheduleRound();
+});
+
+$('back-btn').addEventListener('touchend', function(e){
+  e.preventDefault();
+  clearTimeout(t1); clearTimeout(t2);
+  $('game').style.display = 'none';
+  $('setup').style.display = 'flex';
+  renderSetup();
+});
+$('back-btn').addEventListener('click', function(){
+  clearTimeout(t1); clearTimeout(t2);
+  $('game').style.display = 'none';
+  $('setup').style.display = 'flex';
+  renderSetup();
+});
+
+// init
+addPlayer(''); addPlayer('');
+</script>
+</body>
+</html>
